@@ -21,7 +21,7 @@ export default function (opt) {
 
   function GetClientIdFromHostname(hostname) {
     // The myTldjs.getSubdomain() function will return null for localhost
-    if (hostname.match(/\.localhost:\d+$/g)) {
+    if (hostname.match(/\.localhost(:\d+)?$/g)) {
       return hostname.split('.')[0];
     }
     return myTldjs.getSubdomain(hostname);
