@@ -7,7 +7,10 @@ import tldjs from 'tldjs';
 
 import ClientManager from './lib/ClientManager';
 
-const debug = Debug('localtunnel:server');
+const logger = {
+  debug: Debug('localtunnel:server:debug'),
+  error: Debug('localtunnel:server:error'),
+};
 
 export default function (opt) {
   opt = opt || {};
@@ -61,13 +64,10 @@ export default function (opt) {
     }
 
     try {
-      debug('deleting client with id %s...', clientId);
-
+      logger.debug(`Removing client with id ${clientId} due to API request`);
       manager.removeClient(clientId);
-
-      debug('\n...deleted client with id %s', clientId);
     } catch (e) {
-      console.log(e);
+      logger.error(e);
       ctx.throw(404);
       return;
     }
@@ -77,11 +77,17 @@ export default function (opt) {
     };
   });
 
+  app.use(async (ctx, next) => {
+    const method = ctx.request.method;
+    const path = ctx.request.path;
+    const query = ctx.request.query;
+    logger.debug('Incoming request', method, path, JSON.stringify(query));
+    await next();
+  });
+
   // root endpoint
   app.use(async (ctx, next) => {
     const path = ctx.request.path;
-    console.log('path', path);
-    console.log('ctx.query', ctx.query['new']);
 
     // skip anything not on the root path
     if (path !== '/') {
@@ -92,7 +98,7 @@ export default function (opt) {
     const isNewClientRequest = ctx.query['new'] !== undefined;
     if (isNewClientRequest) {
       const reqId = hri.random();
-      debug('making new client with id %s', reqId);
+      logger.debug('Making new client with id %s', reqId);
       const info = await manager.newClient(reqId);
 
       const url = schema + '://' + info.id + '.' + ctx.request.host;
@@ -119,7 +125,7 @@ export default function (opt) {
     }
 
     const reqId = parts[1];
-    console.log('reqId', reqId);
+    logger.debug('reqId:', reqId);
 
     // limit requested hostnames to 63 characters
     if (!/^(?:[a-z0-9][a-z0-9\-]{4,63}[a-z0-9]|[a-z0-9]{4,63})$/.test(reqId)) {
@@ -132,7 +138,7 @@ export default function (opt) {
       return;
     }
 
-    debug('making new client with id %s', reqId);
+    logger.debug('Making new client with id %s', reqId);
     const info = await manager.newClient(reqId);
 
     const url = schema + '://' + info.id + '.' + ctx.request.host;
@@ -162,7 +168,7 @@ export default function (opt) {
 
     const client = manager.getClient(clientId);
     if (!client) {
-      console.log('no client in manager...?');
+      console.log('Client not found for id', clientId);
       res.statusCode = 405;
       res.end('405');
     }
