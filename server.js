@@ -63,7 +63,7 @@ export default function (opt) {
     const clientId = ctx.params.id;
     const client = manager.getClient(clientId);
     if (!client) {
-      ctx.throw(404);
+      ctx.throw(405);
       return;
     }
 
@@ -72,7 +72,7 @@ export default function (opt) {
       manager.removeClient(clientId);
     } catch (e) {
       logger.error(e);
-      ctx.throw(404);
+      ctx.throw(405);
       return;
     }
 
