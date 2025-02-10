@@ -1,14 +1,16 @@
-import log from 'book';
-import Koa from 'koa';
-import tldjs from 'tldjs';
 import Debug from 'debug';
 import http from 'http';
 import { hri } from 'human-readable-ids';
+import Koa from 'koa';
 import Router from 'koa-router';
-
+import tldjs from 'tldjs';
 import ClientManager from './lib/ClientManager';
+import { endOrDestroy } from './lib/utils';
 
-const debug = Debug('localtunnel:server');
+const logger = {
+  debug: Debug('localtunnel:server:debug'),
+  error: Debug('localtunnel:server:error'),
+};
 
 export default function (opt) {
   opt = opt || {};
@@ -18,6 +20,10 @@ export default function (opt) {
   const landingPage = opt.landing || 'https://localtunnel.github.io/www/';
 
   function GetClientIdFromHostname(hostname) {
+    // The myTldjs.getSubdomain() function will return null for localhost
+    if (hostname.match(/\.localhost(:\d+)?$/g)) {
+      return hostname.split('.')[0];
+    }
     return myTldjs.getSubdomain(hostname);
   }
 
@@ -40,7 +46,7 @@ export default function (opt) {
     const clientId = ctx.params.id;
     const client = manager.getClient(clientId);
     if (!client) {
-      ctx.throw(404);
+      ctx.throw(405);
       return;
     }
 
@@ -52,6 +58,36 @@ export default function (opt) {
 
   app.use(router.routes());
   app.use(router.allowedMethods());
+
+  router.del('/api/tunnels/:id', async (ctx, next) => {
+    const clientId = ctx.params.id;
+    const client = manager.getClient(clientId);
+    if (!client) {
+      ctx.throw(405);
+      return;
+    }
+
+    try {
+      logger.debug(`Removing client with id ${clientId} due to API request`);
+      manager.removeClient(clientId);
+    } catch (e) {
+      logger.error(e);
+      ctx.throw(405);
+      return;
+    }
+
+    ctx.body = {
+      deletedClientId: clientId,
+    };
+  });
+
+  app.use(async (ctx, next) => {
+    const method = ctx.request.method;
+    const path = ctx.request.path;
+    const query = ctx.request.query;
+    logger.debug('Incoming request', method, path, JSON.stringify(query));
+    await next();
+  });
 
   // root endpoint
   app.use(async (ctx, next) => {
@@ -66,7 +102,7 @@ export default function (opt) {
     const isNewClientRequest = ctx.query['new'] !== undefined;
     if (isNewClientRequest) {
       const reqId = hri.random();
-      debug('making new client with id %s', reqId);
+      logger.debug('Making new client with id %s', reqId);
       const info = await manager.newClient(reqId);
 
       const url = schema + '://' + info.id + '.' + ctx.request.host;
@@ -93,6 +129,7 @@ export default function (opt) {
     }
 
     const reqId = parts[1];
+    logger.debug('reqId:', reqId);
 
     // limit requested hostnames to 63 characters
     if (!/^(?:[a-z0-9][a-z0-9\-]{4,63}[a-z0-9]|[a-z0-9]{4,63})$/.test(reqId)) {
@@ -105,7 +142,7 @@ export default function (opt) {
       return;
     }
 
-    debug('making new client with id %s', reqId);
+    logger.debug('Making new client with id %s', reqId);
     const info = await manager.newClient(reqId);
 
     const url = schema + '://' + info.id + '.' + ctx.request.host;
@@ -135,9 +172,9 @@ export default function (opt) {
 
     const client = manager.getClient(clientId);
     if (!client) {
-      res.statusCode = 404;
-      res.end('404');
-      return;
+      console.log('Client not found for id', clientId);
+      res.statusCode = 405;
+      res.end('405');
     }
 
     client.handleRequest(req, res);
@@ -146,19 +183,19 @@ export default function (opt) {
   server.on('upgrade', (req, socket, head) => {
     const hostname = req.headers.host;
     if (!hostname) {
-      socket.destroy();
+      endOrDestroy(socket);
       return;
     }
 
     const clientId = GetClientIdFromHostname(hostname);
     if (!clientId) {
-      socket.destroy();
+      endOrDestroy(socket);
       return;
     }
 
     const client = manager.getClient(clientId);
     if (!client) {
-      socket.destroy();
+      endOrDestroy(socket);
       return;
     }
 
