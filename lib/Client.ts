@@ -54,7 +54,7 @@ class Client extends EventEmitter {
 
     // TODO(roman): an agent error removes the client, the user needs to re-connect?
     // how does a user realize they need to re-connect vs some random client being assigned same port?
-    agent.once('error', err => {
+    agent.once('error', (err: Error) => {
       this.error('Closing client due to agent error:', this.id);
       this.close();
     });
