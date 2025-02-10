@@ -1,11 +1,9 @@
-#!/usr/bin/env node -r esm
+#!/usr/bin/env npx tsx
 
-import 'localenv';
-import optimist from 'optimist';
-
-import log from 'book';
 import Debug from 'debug';
-
+import 'localenv';
+import type { AddressInfo } from 'node:net';
+import optimist from 'optimist';
 import CreateServer from '../server';
 
 const debug = Debug('localtunnel');
@@ -46,7 +44,8 @@ const server = CreateServer({
 });
 
 server.listen(argv.port, argv.address, () => {
-  debug('server listening on port: %d', server.address().port);
+  const { port } = server.address() as AddressInfo;
+  debug('server listening on port: %d', port);
 });
 
 process.on('SIGINT', () => {
@@ -58,11 +57,9 @@ process.on('SIGTERM', () => {
 });
 
 process.on('uncaughtException', err => {
-  log.error(err);
+  console.error(err);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  log.error(reason);
+  console.error(reason);
 });
-
-// vim: ft=javascript

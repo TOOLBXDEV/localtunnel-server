@@ -1,7 +1,6 @@
-import log from 'book';
 import Debug from 'debug';
 import { Agent } from 'http';
-import net from 'net';
+import net, { Socket } from 'net';
 import { endOrDestroy } from './utils';
 
 const DEFAULT_MAX_SOCKETS = 10;
@@ -9,8 +8,30 @@ const DEFAULT_MAX_SOCKETS = 10;
 // Implements an http.Agent interface to a pool of tunnel sockets
 // A tunnel socket is a connection _from_ a client that will
 // service http requests. This agent is usable wherever one can use an http.Agent
+interface TunnelAgentOptions {
+  clientId: string;
+  maxTcpSockets?: number;
+}
+
+interface ListenInfo {
+  port: number;
+}
+
+interface Stats {
+  connectedSockets: number;
+}
+
 class TunnelAgent extends Agent {
-  constructor(options = {}) {
+  private availableSockets: Socket[];
+  private waitingCreateConn: ((err: Error | null, socket: Socket | null) => void)[];
+  private debug: Debug.Debugger;
+  private connectedSockets: number;
+  private maxTcpSockets: number;
+  private server: net.Server;
+  private started: boolean;
+  private closed: boolean;
+
+  constructor(options: TunnelAgentOptions = { clientId: '' }) {
     super({
       keepAlive: true,
       // only allow keepalive to hold on to one socket
@@ -39,13 +60,13 @@ class TunnelAgent extends Agent {
     this.closed = false;
   }
 
-  stats() {
+  stats(): Stats {
     return {
       connectedSockets: this.connectedSockets,
     };
   }
 
-  listen() {
+  listen(): Promise<ListenInfo> {
     const server = this.server;
     if (this.started) {
       throw new Error('already started');
@@ -54,17 +75,16 @@ class TunnelAgent extends Agent {
 
     server.on('close', this._onClose.bind(this));
     server.on('connection', this._onConnection.bind(this));
-    server.on('error', err => {
-      // These errors happen from killed connections, we don't worry about them
+    server.on('error', (err: Error & { code?: string }) => {
       if (err.code == 'ECONNRESET' || err.code == 'ETIMEDOUT') {
         return;
       }
-      log.error(err);
+      console.error(err);
     });
 
     return new Promise(resolve => {
       server.listen(() => {
-        const port = server.address().port;
+        const port = (server.address() as net.AddressInfo).port;
         this.debug('tcp server listening on port: %d', port);
 
         resolve({
@@ -75,7 +95,7 @@ class TunnelAgent extends Agent {
     });
   }
 
-  _onClose() {
+  private _onClose() {
     this.closed = true;
     this.debug('closed tcp socket');
     // flush any waiting connections
@@ -86,8 +106,7 @@ class TunnelAgent extends Agent {
     this.emit('end');
   }
 
-  // new socket connection from client for tunneling requests to client
-  _onConnection(socket) {
+  private _onConnection(socket: Socket) {
     // no more socket connections allowed
     if (this.connectedSockets >= this.maxTcpSockets) {
       this.debug('no more sockets allowed');
@@ -123,7 +142,8 @@ class TunnelAgent extends Agent {
     }
 
     this.connectedSockets += 1;
-    this.debug('new connection from: %s:%s', socket.address().address, socket.address().port);
+    const { address, port } = socket.address() as net.AddressInfo;
+    this.debug('new connection from: %s:%s', address, port);
 
     // if there are queued callbacks, give this socket now and don't queue into available
     const fn = this.waitingCreateConn.shift();
@@ -142,9 +162,9 @@ class TunnelAgent extends Agent {
   // fetch a socket from the available socket pool for the agent
   // if no socket is available, queue
   // cb(err, socket)
-  createConnection(options, cb) {
+  createConnection(options: any, cb: (err: Error | null, socket: Socket | null) => void) {
     if (this.closed) {
-      cb(new Error('closed'));
+      cb(new Error('closed'), null);
       return;
     }
 
