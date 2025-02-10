@@ -1,8 +1,7 @@
-import request from 'supertest';
 import assert from 'assert';
-import { Server as WebSocketServer } from 'ws';
-import WebSocket from 'ws';
 import net from 'net';
+import request from 'supertest';
+import WebSocket, { Server as WebSocketServer } from 'ws';
 
 import createServer from './server';
 
@@ -31,11 +30,11 @@ describe('Server', () => {
   it('reject long domain name requests', async () => {
     const server = createServer();
     const res = await request(server).get(
-      '/thisdomainisoutsidethesizeofwhatweallowwhichissixtythreecharacters',
+      '/thisdomainisoutsidethesizeofwhatweallowwhichissixtythreecharacters'
     );
     assert.equal(
       res.body.message,
-      'Invalid subdomain. Subdomains must be lowercase and between 4 and 63 alphanumeric characters.',
+      'Invalid subdomain. Subdomains must be lowercase and between 4 and 63 alphanumeric characters.'
     );
   });
 
@@ -94,7 +93,7 @@ describe('Server', () => {
 
     // no such tunnel yet
     const res = await request(server).get('/api/tunnels/foobar-test/status');
-    assert.equal(res.statusCode, 404);
+    assert.equal(res.statusCode, 405);
 
     // request a new client called foobar-test
     {

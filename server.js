@@ -5,7 +5,7 @@ import Koa from 'koa';
 import Router from 'koa-router';
 import tldjs from 'tldjs';
 import ClientManager from './lib/ClientManager';
-import { closeOrDestroy } from './lib/utils';
+import { endOrDestroy } from './lib/utils';
 
 const logger = {
   debug: Debug('localtunnel:server:debug'),
@@ -183,19 +183,19 @@ export default function (opt) {
   server.on('upgrade', (req, socket, head) => {
     const hostname = req.headers.host;
     if (!hostname) {
-      closeOrDestroy(socket);
+      endOrDestroy(socket);
       return;
     }
 
     const clientId = GetClientIdFromHostname(hostname);
     if (!clientId) {
-      closeOrDestroy(socket);
+      endOrDestroy(socket);
       return;
     }
 
     const client = manager.getClient(clientId);
     if (!client) {
-      closeOrDestroy(socket);
+      endOrDestroy(socket);
       return;
     }
 
