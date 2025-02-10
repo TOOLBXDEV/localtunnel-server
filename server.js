@@ -4,8 +4,8 @@ import { hri } from 'human-readable-ids';
 import Koa from 'koa';
 import Router from 'koa-router';
 import tldjs from 'tldjs';
-
 import ClientManager from './lib/ClientManager';
+import { closeOrDestroy } from './lib/utils';
 
 const logger = {
   debug: Debug('localtunnel:server:debug'),
@@ -183,19 +183,19 @@ export default function (opt) {
   server.on('upgrade', (req, socket, head) => {
     const hostname = req.headers.host;
     if (!hostname) {
-      socket.destroy();
+      closeOrDestroy(socket);
       return;
     }
 
     const clientId = GetClientIdFromHostname(hostname);
     if (!clientId) {
-      socket.destroy();
+      closeOrDestroy(socket);
       return;
     }
 
     const client = manager.getClient(clientId);
     if (!client) {
-      socket.destroy();
+      closeOrDestroy(socket);
       return;
     }
 
