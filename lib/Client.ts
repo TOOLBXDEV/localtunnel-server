@@ -1,14 +1,25 @@
 import Debug from 'debug';
 import EventEmitter from 'events';
-import http from 'http';
+import http, { IncomingMessage, ServerResponse } from 'http';
 import pump from 'pump';
+
+interface ClientOptions {
+  agent: any;
+  id: string;
+}
 
 // A client encapsulates req/res handling using an agent
 //
 // If an agent is destroyed, the request handling will error
 // The caller is responsible for handling a failed request
 class Client extends EventEmitter {
-  constructor(options) {
+  private agent: any;
+  private id: string;
+  private debug: Debug.Debugger;
+  private error: Debug.Debugger;
+  private graceTimeout: NodeJS.Timeout;
+
+  constructor(options: ClientOptions) {
     super();
 
     const agent = (this.agent = options.agent);
@@ -59,7 +70,7 @@ class Client extends EventEmitter {
     this.emit('close');
   }
 
-  handleRequest(req, res) {
+  handleRequest(req: IncomingMessage, res: ServerResponse) {
     this.debug('> %s', req.url);
     const opt = {
       path: req.url,
@@ -68,10 +79,10 @@ class Client extends EventEmitter {
       headers: req.headers,
     };
 
-    const clientReq = http.request(opt, clientRes => {
+    const clientReq = http.request(opt, (clientRes: IncomingMessage) => {
       this.debug('< %s', req.url);
       // write response code and headers
-      res.writeHead(clientRes.statusCode, clientRes.headers);
+      res.writeHead(clientRes.statusCode!, clientRes.headers);
 
       // using pump is deliberate - see the pump docs for why
       pump(clientRes, res);
@@ -80,7 +91,7 @@ class Client extends EventEmitter {
     // this can happen when underlying agent produces an error
     // in our case we 504 gateway error this?
     // if we have already sent headers?
-    clientReq.once('error', err => {
+    clientReq.once('error', (err: Error) => {
       // TODO(roman): if headers not sent - respond with gateway unavailable
     });
 
@@ -88,9 +99,9 @@ class Client extends EventEmitter {
     pump(req, clientReq);
   }
 
-  handleUpgrade(req, socket) {
+  handleUpgrade(req: IncomingMessage, socket: any) {
     this.debug('> [up] %s', req.url);
-    socket.once('error', err => {
+    socket.once('error', (err: { code?: string }) => {
       // These client side errors can happen if the client dies while we are reading
       // We don't need to surface these in our logs.
       if (err.code == 'ECONNRESET' || err.code == 'ETIMEDOUT') {
@@ -99,7 +110,7 @@ class Client extends EventEmitter {
       this.error(err);
     });
 
-    this.agent.createConnection({}, (err, conn) => {
+    this.agent.createConnection({}, (err: Error, conn: any) => {
       this.debug('< [up] %s', req.url);
       // any errors getting a connection mean we cannot service this request
       if (err) {
