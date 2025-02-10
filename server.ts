@@ -1,8 +1,9 @@
+import { randomBytes } from 'crypto';
 import Debug from 'debug';
-import http from 'http';
-import { hri } from 'human-readable-ids';
+import http, { IncomingMessage, ServerResponse } from 'http';
 import Koa from 'koa';
 import Router from 'koa-router';
+import type { Socket } from 'net';
 import tldjs from 'tldjs';
 import ClientManager from './lib/ClientManager';
 import { endOrDestroy } from './lib/utils';
@@ -12,14 +13,27 @@ const logger = {
   error: Debug('localtunnel:server:error'),
 };
 
-export default function (opt) {
-  opt = opt || {};
+interface ServerOptions {
+  domain?: string;
+  landing?: string;
+  secure?: boolean;
+  max_tcp_sockets?: number;
+}
 
+function generateRandomHexString(length: number = 10): string {
+  // We need enough bytes so that when converted to hex (2 characters per byte)
+  // we have at least the requested length. Math.ceil(length/2) calculates that.
+  const bytes = randomBytes(Math.ceil(length / 2));
+  const hex = bytes.toString('hex');
+  return hex.slice(0, length);
+}
+
+export default function (opt: ServerOptions = {}) {
   const validHosts = opt.domain ? [opt.domain] : undefined;
   const myTldjs = tldjs.fromUserSettings({ validHosts });
   const landingPage = opt.landing || 'https://localtunnel.github.io/www/';
 
-  function GetClientIdFromHostname(hostname) {
+  function GetClientIdFromHostname(hostname: string): string | null {
     // The myTldjs.getSubdomain() function will return null for localhost
     if (hostname.match(/\.localhost(:\d+)?$/g)) {
       return hostname.split('.')[0];
@@ -101,7 +115,7 @@ export default function (opt) {
 
     const isNewClientRequest = ctx.query['new'] !== undefined;
     if (isNewClientRequest) {
-      const reqId = hri.random();
+      const reqId = generateRandomHexString(10);
       logger.debug('Making new client with id %s', reqId);
       const info = await manager.newClient(reqId);
 
@@ -155,8 +169,7 @@ export default function (opt) {
 
   const appCallback = app.callback();
 
-  server.on('request', (req, res) => {
-    // without a hostname, we won't know who the request is for
+  server.on('request', (req: IncomingMessage, res: ServerResponse) => {
     const hostname = req.headers.host;
     if (!hostname) {
       res.statusCode = 400;
@@ -175,12 +188,13 @@ export default function (opt) {
       console.log('Client not found for id', clientId);
       res.statusCode = 405;
       res.end('405');
+      return;
     }
 
     client.handleRequest(req, res);
   });
 
-  server.on('upgrade', (req, socket, head) => {
+  server.on('upgrade', (req: IncomingMessage, socket: Socket, head: Buffer) => {
     const hostname = req.headers.host;
     if (!hostname) {
       endOrDestroy(socket);
