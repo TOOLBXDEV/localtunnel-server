@@ -8,44 +8,61 @@ const logger = {
   error: Debug('lt:ClientManager:error'),
 };
 
+interface ClientManagerOptions {
+  max_tcp_sockets?: number;
+}
+
+interface ClientInfo {
+  id: string;
+  port: number;
+  max_conn_count: number;
+  url?: string;
+}
+
+interface Stats {
+  tunnels: number;
+}
+
 // Manage sets of clients
 //
 // A client is a "user session" established to service a remote localtunnel client
 class ClientManager {
-  constructor(opt) {
-    this.opt = opt || {};
+  stats: Stats;
+
+  private opt: ClientManagerOptions;
+  private clients: Map<string, Client>;
+  private graceTimeout: NodeJS.Timeout | null;
+
+  constructor(opt: ClientManagerOptions = {}) {
+    this.opt = opt;
 
     // id -> client instance
     this.clients = new Map();
-
-    // statistics
     this.stats = {
       tunnels: 0,
     };
-
-    // This is totally wrong :facepalm: this needs to be per-client...
     this.graceTimeout = null;
   }
 
   // create a new tunnel with `id`
   // if the id is already used, a random id is assigned
   // if the tunnel could not be created, throws an error
-  async newClient(id) {
+  async newClient(id: string): Promise<ClientInfo> {
     const clients = this.clients;
     const stats = this.stats;
 
     // can't ask for id already is use
-    if (clients[id]) {
+    if (clients.has(id)) {
       logger.info(
         `Client with id "${id}" already exists. Removing old client and creating new one.`
       );
       this.removeClient(id);
     }
 
-    const maxSockets = this.opt.max_tcp_sockets;
+    const maxSockets = this.opt.max_tcp_sockets ?? 10;
     const agent = new TunnelAgent({
       clientId: id,
-      maxSockets: 10,
+      maxTcpSockets: 10,
     });
 
     const client = new Client({
@@ -55,7 +72,7 @@ class ClientManager {
 
     // add to clients map immediately
     // avoiding races with other clients requesting same id
-    clients[id] = client;
+    clients.set(id, client);
 
     client.once('close', () => {
       logger.info('Client closed: %s', id);
@@ -81,23 +98,23 @@ class ClientManager {
     }
   }
 
-  removeClient(id) {
-    const client = this.clients[id];
+  removeClient(id: string): void {
+    const client = this.clients.get(id);
     if (!client) {
       return;
     }
     --this.stats.tunnels;
-    delete this.clients[id];
+    this.clients.delete(id);
     client.close();
     logger.debug(' -> Client removed: %s', id);
   }
 
-  hasClient(id) {
-    return !!this.clients[id];
+  hasClient(id: string): boolean {
+    return this.clients.has(id);
   }
 
-  getClient(id) {
-    return this.clients[id];
+  getClient(id: string): Client | undefined {
+    return this.clients.get(id);
   }
 }
 
