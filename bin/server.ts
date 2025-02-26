@@ -1,5 +1,3 @@
-#!/usr/bin/env npx tsx
-
 import Debug from 'debug';
 import 'localenv';
 import type { AddressInfo } from 'node:net';
