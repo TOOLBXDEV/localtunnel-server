@@ -80,7 +80,7 @@ class Client extends EventEmitter {
     };
 
     const clientReq = http.request(opt, (clientRes: IncomingMessage) => {
-      this.debug('< %s', req.url);
+      this.debug(`< ${req.url} [${clientRes.statusCode} ${clientRes.statusMessage}]`);
       // write response code and headers
       res.writeHead(clientRes.statusCode!, clientRes.headers);
 
