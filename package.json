@@ -37,8 +37,7 @@
   },
   "scripts": {
     "test": "mocha --check-leaks --require esm './**/*.test.js'",
-    "start": "tsc --noEmit && tsx ./bin/server.ts",
     "dev": "tsc --noEmit && ./bin/server.ts --port 3000",
-    "start:dev": "tsc --noEmit && DEBUG=localtunnel:*,lt:ClientManager:* tsx ./bin/server.ts --domain=tunnel.toolbxapp.com --port 1234"
+    "start": "tsc --noEmit && DEBUG=* tsx ./bin/server.ts --domain=localhost --port 1234"
   }
 }
