@@ -54,15 +54,19 @@ class ClientManager {
     // can't ask for id already is use
     if (clients.has(id)) {
       logger.info(
-        `Client with id "${id}" already exists. Removing old client and creating new one.`
+        `Client with id "${id}" already exists. Removing old client and creating new one.`,
       );
       this.removeClient(id);
     }
 
+    // This is how many sockets the client will try to keep up
     const maxSockets = this.opt.max_tcp_sockets ?? 10;
     const agent = new TunnelAgent({
       clientId: id,
-      maxTcpSockets: 10,
+      maxClientSockets: maxSockets,
+      // This is how many sockets the server can accept before throwing an
+      // error. Set it to 2x in case the client is slow to close sockets.
+      maxTcpSockets: maxSockets * 3,
     });
 
     const client = new Client({
