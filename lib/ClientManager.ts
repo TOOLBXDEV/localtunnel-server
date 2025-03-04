@@ -59,10 +59,14 @@ class ClientManager {
       this.removeClient(id);
     }
 
+    // This is how many sockets the client will try to keep up
     const maxSockets = this.opt.max_tcp_sockets ?? 10;
     const agent = new TunnelAgent({
       clientId: id,
-      maxTcpSockets: 10,
+      maxClientSockets: maxSockets,
+      // This is how many sockets the server can accept before throwing an
+      // error. Set it to 2x in case the client is slow to close sockets.
+      maxTcpSockets: maxSockets * 2,
     });
 
     const client = new Client({
